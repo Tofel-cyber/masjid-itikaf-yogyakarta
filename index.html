@@ -678,7 +678,7 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
  
-<script>
+<script type="module">
 // ═══════════════════════════════════════
 // DATA MASJID
 // ═══════════════════════════════════════
@@ -733,7 +733,6 @@ let mosques = [
   }
 ];
  
-<script type="module">
 // ═══════════════════════════════════════
 // FIREBASE IMPORT
 // ═══════════════════════════════════════
@@ -773,8 +772,6 @@ const db = getFirestore(app);
 // ═══════════════════════════════════════
 // GLOBAL DATA
 // ═══════════════════════════════════════
-let mosques = [];
-
 
 // ═══════════════════════════════════════
 // REALTIME LOAD DATA
@@ -785,18 +782,22 @@ const q = query(
 
 onSnapshot(q, (snapshot) => {
 
-  mosques = [];
-
+ const firebaseMosques = [];
   snapshot.forEach((doc) => {
 
-    mosques.push({
+   firebaseMosques.push({
       id: doc.id,
       ...doc.data()
     });
 
   });
 
-  renderList();
+  mosques = [
+  ...mosques,
+  ...firebaseMosques
+];
+
+renderList();
 
 });
 
