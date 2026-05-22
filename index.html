@@ -733,196 +733,478 @@ let mosques = [
   }
 ];
  
-// Load dari localStorage jika ada
-function loadData() {
-  try {
-    const saved = localStorage.getItem('masjid_itikaf_data');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && parsed.length >= 3) mosques = parsed;
-    }
-  } catch(e) {}
-}
- 
-function saveData() {
-  try { localStorage.setItem('masjid_itikaf_data', JSON.stringify(mosques)); } catch(e) {}
-}
- 
+<script type="module">
+
 // ═══════════════════════════════════════
-// RENDER
+// FIREBASE IMPORT
+// ═══════════════════════════════════════
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  orderBy
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+
+// ═══════════════════════════════════════
+// FIREBASE CONFIG
+// ═══════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyB2bGKhvCgY-5bRhUjNiJ6kz6DGfhLHpjY",
+  authDomain: "masjid-itikaf-jogja.firebaseapp.com",
+  projectId: "masjid-itikaf-jogja",
+  storageBucket: "masjid-itikaf-jogja.firebasestorage.app",
+  messagingSenderId: "641773773335",
+  appId: "1:641773773335:web:803dea6a59510df4fb7252",
+  measurementId: "G-C19B5B6190"
+};
+
+// ═══════════════════════════════════════
+// INIT FIREBASE
+// ═══════════════════════════════════════
+const app = initializeApp(firebaseConfig);
+
+const db = getFirestore(app);
+
+
+// ═══════════════════════════════════════
+// GLOBAL DATA
+// ═══════════════════════════════════════
+let mosques = [];
+
+
+// ═══════════════════════════════════════
+// REALTIME LOAD DATA
+// ═══════════════════════════════════════
+const q = query(
+  collection(db, "mosques")
+);
+
+onSnapshot(q, (snapshot) => {
+
+  mosques = [];
+
+  snapshot.forEach((doc) => {
+
+    mosques.push({
+      id: doc.id,
+      ...doc.data()
+    });
+
+  });
+
+  renderList();
+
+});
+
+
+// ═══════════════════════════════════════
+// UPDATE STATS
+// ═══════════════════════════════════════
+function updateStats() {
+
+  const total = mosques.length;
+
+  document.getElementById('stat-total').textContent = total;
+
+  document.getElementById('stat-active').textContent = total;
+
+  document.getElementById('header-badge').textContent =
+    total + ' Masjid';
+}
+
+
+// ═══════════════════════════════════════
+// RENDER LIST
 // ═══════════════════════════════════════
 function renderList() {
-  const q = document.getElementById('search-input').value.toLowerCase().trim();
-  const filtered = mosques.filter(m =>
-    m.name.toLowerCase().includes(q) ||
-    m.area.toLowerCase().includes(q) ||
-    m.address.toLowerCase().includes(q)
-  );
- 
-  const container = document.getElementById('mosques-list');
+
+  const searchInput =
+    document.getElementById('search-input');
+
+  const keyword =
+    searchInput
+      ? searchInput.value.toLowerCase().trim()
+      : '';
+
+  const filtered = mosques.filter(m => {
+
+    return (
+      (m.name || '').toLowerCase().includes(keyword) ||
+      (m.area || '').toLowerCase().includes(keyword) ||
+      (m.address || '').toLowerCase().includes(keyword)
+    );
+
+  });
+
+  const container =
+    document.getElementById('mosques-list');
+
+  if (!container) return;
+
   if (filtered.length === 0) {
-    container.innerHTML = `<div class="empty-state"><div style="font-size:40px;">🔍</div><p>Tidak ada masjid yang ditemukan.<br>Coba kata kunci lain.</p></div>`;
+
+    container.innerHTML = `
+      <div class="empty-state">
+        <div style="font-size:40px;">🕌</div>
+        <p>Belum ada data masjid</p>
+      </div>
+    `;
+
+    updateStats();
+
     return;
   }
- 
+
   container.innerHTML = filtered.map(m => `
-    <div class="mosque-card ${m.isNew ? 'is-new' : ''}" onclick="openDetail(${m.id})">
-      ${m.isNew ? '<span class="new-badge">✦ Baru</span>' : ''}
-      <div class="mosque-name">${m.name}</div>
-      <div class="mosque-area">📍 ${m.area}</div>
+
+    <div class="mosque-card ${m.isNew ? 'is-new' : ''}"
+      onclick="openDetail('${m.id}')">
+
+      ${m.isNew
+        ? '<span class="new-badge">✦ Baru</span>'
+        : ''
+      }
+
+      <div class="mosque-name">
+        ${m.name || '-'}
+      </div>
+
+      <div class="mosque-area">
+        📍 ${m.area || '-'}
+      </div>
+
       <div class="rating-row">
-        <span class="stars">${'★'.repeat(Math.round(m.rating))}</span>
-        <span class="rating-num">${m.rating > 0 ? m.rating.toFixed(1) : '—'}</span>
-        <span style="color:var(--gray-200)">·</span>
-        <span class="status-dot"></span>
-        <span class="status-text">Tersedia</span>
+
+        <span class="stars">
+          ${'★'.repeat(Math.round(m.rating || 0))}
+        </span>
+
+        <span class="rating-num">
+          ${m.rating || '-'}
+        </span>
+
       </div>
+
       <div class="tags-row">
-        ${m.tags.map(t => `<span class="tag tag-green">${t}</span>`).join('')}
-        ${m.capacity ? `<span class="tag tag-blue">👥 ${m.capacity} orang</span>` : ''}
+
+        ${(m.tags || []).map(t => `
+          <span class="tag tag-green">
+            ${t}
+          </span>
+        `).join('')}
+
       </div>
+
       <div class="card-actions">
+
         ${m.phone
-          ? `<a href="https://wa.me/${m.phone.replace(/[^0-9]/g,'')}" class="btn-wa whatsapp" onclick="event.stopPropagation()">
-               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.025.507 3.934 1.399 5.61L.057 23.882a.75.75 0 0 0 .921.94l6.453-1.688A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.885 0-3.652-.497-5.183-1.368l-.371-.214-3.861 1.011 1.031-3.762-.23-.384A9.955 9.955 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
-               WhatsApp Takmir
-             </a>`
-          : `<span class="btn-wa no-contact">Hubungi via kunjungan</span>`
+          ? `
+            <a
+              href="https://wa.me/${String(m.phone).replace(/[^0-9]/g,'')}"
+              class="btn-wa whatsapp"
+              target="_blank"
+              onclick="event.stopPropagation()"
+            >
+              WhatsApp
+            </a>
+          `
+          : `
+            <span class="btn-wa no-contact">
+              Tidak ada kontak
+            </span>
+          `
         }
-        <a href="${m.mapsUrl}" class="btn-wa maps" target="_blank" onclick="event.stopPropagation()">
+
+        <a
+          href="${m.mapsUrl || '#'}"
+          target="_blank"
+          class="btn-wa maps"
+          onclick="event.stopPropagation()"
+        >
           🗺️ Maps
         </a>
+
       </div>
+
     </div>
+
   `).join('');
- 
+
   updateStats();
 }
- 
-function updateStats() {
-  const total = mosques.length;
-  document.getElementById('stat-total').textContent = total;
-  document.getElementById('stat-active').textContent = total;
-  document.getElementById('header-badge').textContent = total + ' Masjid';
-}
- 
-function filterMosques() { renderList(); }
- 
+
+
 // ═══════════════════════════════════════
-// TABS
+// SEARCH
 // ═══════════════════════════════════════
-function switchTab(tab, el) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('tab-list').style.display = tab === 'list' ? 'block' : 'none';
-  document.getElementById('tab-map').style.display = tab === 'map' ? 'block' : 'none';
-}
- 
+window.filterMosques = function() {
+  renderList();
+};
+
+
 // ═══════════════════════════════════════
-// DETAIL SHEET
+// ADD MOSQUE
 // ═══════════════════════════════════════
-function openDetail(id) {
-  const m = mosques.find(x => x.id === id);
-  document.getElementById('d-name').textContent = m.name;
-  document.getElementById('d-area').textContent = m.area;
-  document.getElementById('d-map').src = m.embedUrl;
-  document.getElementById('d-capacity').textContent = m.capacity ? m.capacity + ' orang' : 'Belum tercatat';
-  document.getElementById('d-phone').textContent = m.phone || 'Belum tercatat';
-  document.getElementById('d-address').textContent = m.address;
-  document.getElementById('d-notes').textContent = m.notes || '-';
-  document.getElementById('d-facilities').innerHTML = m.facilities.map(f => `<span class="tag tag-green">${f}</span>`).join('');
-  document.getElementById('d-actions').innerHTML = `
-    ${m.phone ? `<a href="https://wa.me/${m.phone.replace(/[^0-9]/g,'')}" class="sheet-btn wa" target="_blank">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.025.507 3.934 1.399 5.61L.057 23.882a.75.75 0 0 0 .921.94l6.453-1.688A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.885 0-3.652-.497-5.183-1.368l-.371-.214-3.861 1.011 1.031-3.762-.23-.384A9.955 9.955 0 0 1 2 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
-      WhatsApp Takmir
-    </a>` : ''}
-    <a href="${m.mapsUrl}" class="sheet-btn maps-btn" target="_blank">🗺️ Buka Maps</a>
-  `;
-  document.getElementById('detail-overlay').classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
- 
-function closeDetail(e) {
-  if (e.target === document.getElementById('detail-overlay')) closeDetailBtn();
-}
-function closeDetailBtn() {
-  document.getElementById('detail-overlay').classList.remove('open');
-  document.getElementById('d-map').src = '';
-  document.body.style.overflow = '';
-}
- 
-// ═══════════════════════════════════════
-// ADD FORM
-// ═══════════════════════════════════════
-function openAddForm() {
-  document.getElementById('add-modal').classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-function closeAddModal(e) {
-  if (e.target === document.getElementById('add-modal')) closeAddForm();
-}
-function closeAddForm() {
-  document.getElementById('add-modal').classList.remove('open');
-  document.body.style.overflow = '';
-}
- 
-function addMosque() {
-  const name = document.getElementById('f-name').value.trim();
-  const takmir = document.getElementById('f-takmir').value.trim();
-  const phone = document.getElementById('f-phone').value.trim();
-  const address = document.getElementById('f-address').value.trim();
-  const capacity = document.getElementById('f-capacity').value.trim();
-  const maps = document.getElementById('f-maps').value.trim();
-  const facilities = document.getElementById('f-facilities').value.trim();
-  const notes = document.getElementById('f-notes').value.trim();
- 
+window.addMosque = async function() {
+
+  const name =
+    document.getElementById('f-name').value.trim();
+
+  const takmir =
+    document.getElementById('f-takmir').value.trim();
+
+  const phone =
+    document.getElementById('f-phone').value.trim();
+
+  const address =
+    document.getElementById('f-address').value.trim();
+
+  const capacity =
+    document.getElementById('f-capacity').value.trim();
+
+  const maps =
+    document.getElementById('f-maps').value.trim();
+
+  const facilities =
+    document.getElementById('f-facilities').value.trim();
+
+  const notes =
+    document.getElementById('f-notes').value.trim();
+
   if (!name || !address) {
-    showToast('⚠️ Nama masjid dan alamat wajib diisi');
+
+    showToast('⚠️ Nama dan alamat wajib diisi');
+
     return;
   }
- 
-  const newId = mosques.length > 0 ? Math.max(...mosques.map(m => m.id)) + 1 : 1;
-  const phoneClean = phone.replace(/^0/, '62');
- 
-  mosques.push({
-    id: newId,
-    name,
-    area: address.split(',').slice(-2).join(',').trim(),
-    address,
-    takmir: takmir || 'Belum tercatat',
-    phone: phone || null,
-    capacity: capacity || null,
-    facilities: facilities ? facilities.split(',').map(f => f.trim()).filter(Boolean) : [],
-    notes: notes || '',
-    rating: 0,
-    mapsUrl: maps || `https://maps.google.com/?q=${encodeURIComponent(name + ' ' + address)}`,
-    embedUrl: maps
-      ? maps.replace('google.com/maps/', 'google.com/maps/embed/').split('?')[0]
-      : `https://www.google.com/maps/embed?pb=!1m2!1d-7.79!2d110.35`,
-    isNew: true,
-    tags: [takmir ? takmir : 'Baru ditambahkan']
+
+  try {
+
+    await addDoc(collection(db, "mosques"), {
+
+      name,
+      takmir,
+      phone,
+      address,
+      area: address,
+      capacity,
+
+      facilities: facilities
+        ? facilities.split(',').map(f => f.trim())
+        : [],
+
+      notes,
+
+      rating: 0,
+
+      mapsUrl:
+        maps ||
+        `https://maps.google.com/?q=${encodeURIComponent(name + ' ' + address)}`,
+
+      embedUrl: maps || '',
+
+      isNew: true,
+
+      tags: ['Baru'],
+
+      createdAt: Date.now()
+
+    });
+
+    clearForm();
+
+    closeAddForm();
+
+    showToast('✅ Masjid berhasil ditambahkan');
+
+  } catch (error) {
+
+    console.error(error);
+
+    showToast('❌ Gagal menyimpan');
+
+  }
+
+};
+
+
+// ═══════════════════════════════════════
+// CLEAR FORM
+// ═══════════════════════════════════════
+function clearForm() {
+
+  [
+    'f-name',
+    'f-takmir',
+    'f-phone',
+    'f-address',
+    'f-capacity',
+    'f-maps',
+    'f-facilities',
+    'f-notes'
+  ].forEach(id => {
+
+    const el = document.getElementById(id);
+
+    if (el) el.value = '';
+
   });
- 
-  saveData();
-  ['f-name','f-takmir','f-phone','f-address','f-capacity','f-maps','f-facilities','f-notes']
-    .forEach(id => { document.getElementById(id).value = ''; });
-  closeAddForm();
-  renderList();
-  showToast('✅ Masjid berhasil ditambahkan!');
+
 }
- 
+
+
+// ═══════════════════════════════════════
+// DETAIL
+// ═══════════════════════════════════════
+window.openDetail = function(id) {
+
+  const m =
+    mosques.find(x => x.id === id);
+
+  if (!m) return;
+
+  document.getElementById('d-name').textContent =
+    m.name || '-';
+
+  document.getElementById('d-area').textContent =
+    m.area || '-';
+
+  document.getElementById('d-address').textContent =
+    m.address || '-';
+
+  document.getElementById('d-phone').textContent =
+    m.phone || '-';
+
+  document.getElementById('d-capacity').textContent =
+    m.capacity || '-';
+
+  document.getElementById('d-notes').textContent =
+    m.notes || '-';
+
+  document.getElementById('d-facilities').innerHTML =
+    (m.facilities || []).map(f => `
+      <span class="tag tag-green">
+        ${f}
+      </span>
+    `).join('');
+
+  document.getElementById('d-map').src =
+    m.embedUrl || '';
+
+  document.getElementById('d-actions').innerHTML = `
+
+    <a
+      href="${m.mapsUrl || '#'}"
+      target="_blank"
+      class="sheet-btn maps-btn"
+    >
+      🗺️ Buka Maps
+    </a>
+
+  `;
+
+  document.getElementById('detail-overlay')
+    .classList.add('open');
+
+  document.body.style.overflow = 'hidden';
+
+};
+
+
+// ═══════════════════════════════════════
+// CLOSE DETAIL
+// ═══════════════════════════════════════
+window.closeDetailBtn = function() {
+
+  document.getElementById('detail-overlay')
+    .classList.remove('open');
+
+  document.body.style.overflow = '';
+
+};
+
+window.closeDetail = function(e) {
+
+  if (e.target.id === 'detail-overlay') {
+    closeDetailBtn();
+  }
+
+};
+
+
+// ═══════════════════════════════════════
+// MODAL
+// ═══════════════════════════════════════
+window.openAddForm = function() {
+
+  document.getElementById('add-modal')
+    .classList.add('open');
+
+  document.body.style.overflow = 'hidden';
+
+};
+
+window.closeAddForm = function() {
+
+  document.getElementById('add-modal')
+    .classList.remove('open');
+
+  document.body.style.overflow = '';
+
+};
+
+window.closeAddModal = function(e) {
+
+  if (e.target.id === 'add-modal') {
+    closeAddForm();
+  }
+
+};
+
+
+// ═══════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════
 function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
+
+  const toast =
+    document.getElementById('toast');
+
+  toast.textContent = msg;
+
+  toast.classList.add('show');
+
+  setTimeout(() => {
+
+    toast.classList.remove('show');
+
+  }, 3000);
+
 }
- 
+
+
 // ═══════════════════════════════════════
-// INIT
+// TAB SWITCH
 // ═══════════════════════════════════════
-loadData();
-renderList();
+window.switchTab = function(tab, el) {
+
+  document.querySelectorAll('.tab')
+    .forEach(t => t.classList.remove('active'));
+
+  el.classList.add('active');
+
+  document.getElementById('tab-list').style.display =
+    tab === 'list' ? 'block' : 'none';
+
+  document.getElementById('tab-map').style.display =
+    tab === 'map' ? 'block' : 'none';
+
+};
 </script>
 </body>
 </html>
